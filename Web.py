@@ -1,4 +1,5 @@
 # app.py
+import os
 import streamlit as st
 import pandas as pd
 import xgboost as xgb
@@ -6,44 +7,40 @@ import shap
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 
-# 2. 指定自变量和因变量
+# —— 1. 读取数据 ——
+BASE_DIR = os.path.dirname(__file__)
+data_path = os.path.join(BASE_DIR, "data", "data_selected.xlsx")
+data = pd.read_excel(data_path)
 
-data = pd.read_excel(
-    r"F:\数据\（1）机器学习预测模型数据\A012-CHARLS 2011-2020年已清洗最全"
-    r"\charls2011~2020清洗好+原版数据\整理完的-charls数据\Lasso回归\data_selected.xlsx"
-)
-
+# —— 2. 特征与标签 ——
 selected_features = [
     'age', 'gender', 'familysize', 'exercise', 'totmet',
     'srh', 'diabe', 'cancre', 'hearte', 'satlife',
     'iadl', 'pain'
 ]
-
 X = data[selected_features]
 y = data['hibpe']
 
-# 3. 划分训练集和测试集
+# —— 3. 划分数据集 ——
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.3, random_state=123
 )
 
-# 4. 创建并训练 XGBoost 分类模型
+# —— 4. 训练 XGBoost ——
 model = xgb.XGBClassifier(
-        learning_rate=0.1, max_depth=3, n_estimators=100, subsample=0.8
-    )
+    learning_rate=0.1, max_depth=3,
+    n_estimators=100, subsample=0.8
+)
 model.fit(X_train, y_train)
 
-
+# —— 5. 缓存 SHAP Explainer ——
 @st.cache_resource
-def load_model_and_explainer():
-    # 这是函数体，缩进了 4 个空格
-    explainer = shap.TreeExplainer(model)
-    return model, explainer  # ← 也是同样的 4 个空格
+def load_explainer(m):
+    return shap.TreeExplainer(m)
 
-    # 函数定义完毕，回到顶格
-    model, explainer = load_model_and_explainer()
+explainer = load_explainer(model)
 
-# —— 2. Streamlit 页面布局 ——
+# —— 6. Streamlit 界面 ——
 st.title("健康风险预测 (CHARLS) + SHAP 可解释性")
 
 st.sidebar.header("输入患者特征")
@@ -61,31 +58,26 @@ iadl       = st.sidebar.number_input("IADL score",             min_value=0.0,  m
 pain       = st.sidebar.selectbox("Pain (0=No, 1=Yes)",       [0,1])
 
 if st.sidebar.button("Predict"):
-    # —— 3. 构造输入、预测 ——
+    # 构造单条样本
     X_new = pd.DataFrame([{
         "age": age, "gender": gender, "familysize": familysize,
         "exercise": exercise, "totmet": totmet, "srh": srh,
         "diabe": diabe, "cancre": cancre, "hearte": hearte,
         "satlife": satlife, "iadl": iadl, "pain": pain
     }])
+    # 预测
     proba = model.predict_proba(X_new)[0]
     pred  = model.predict(X_new)[0]
 
     st.subheader("预测结果")
     st.write(f"- **Predicted Class:** {pred}")
-    st.write(f"- **Prediction Probabilities:** `{proba}`")
+    st.write(f"- **Prediction Probabilities:** {proba}")
 
-# —— 4. SHAP 力图（静态 matplotlib 版） ——
-    shap_values = explainer.shap_values(X_new)
-    fig, ax = plt.subplots(figsize=(8, 1.5))
-    shap.force_plot(
-        explainer.expected_value,
-        shap_values[0],
-        X_new.iloc[0],
-        matplotlib=True,
-        show=False
-    )
-    plt.title("SHAP Force Plot for This Sample")
+    # SHAP 值 & 条形图
+    shap_values = explainer.shap_values(X_new)[0]
+    fig, ax = plt.subplots(figsize=(8, 4))
+    shap.bar_plot(shap_values, feature_names=X_new.columns, show=False)
+    plt.title("SHAP Feature Impact")
     plt.tight_layout()
     st.pyplot(fig)
 
