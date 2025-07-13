@@ -1,47 +1,29 @@
-# app.py
+# web.py
 import streamlit as st
 import pandas as pd
-import xgboost as xgb
 import shap
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
 from pathlib import Path
+import joblib  # 或者用 pickle
 
-# 1. 加载数据
-data_path = Path(r"F:\数据\（1）机器学习预测模型数据\A012-CHARLS 2011-2020年已清洗最全"
-                 r"\charls2011~2020清洗好+原版数据\整理完的-charls数据\Lasso回归\data_selected.xlsx")
-data = pd.read_excel(data_path)
-
-selected_features = [
-    'age', 'gender', 'familysize', 'exercise', 'totmet',
-    'srh', 'diabe', 'cancre', 'hearte', 'satlife',
-    'iadl', 'pain'
-]
-X = data[selected_features]
-y = data['hibpe']
-
-# 2. 划分数据并训练模型
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.3, random_state=123
-)
-model = xgb.XGBClassifier(
-    learning_rate=0.1, max_depth=3, n_estimators=100, subsample=0.8
-)
-model.fit(X_train, y_train)
-
-# 3. 缓存 Explainer，参数名前加 "_"，避免 UnhashableParamError
+# 1. 定义模型和 Explainer 的加载函数，缓存资源
 @st.cache_resource
-def load_model_and_explainer(_model):
-    explainer = shap.TreeExplainer(_model)
-    return _model, explainer
+def load_model_and_explainer(_model_path: str):
+    # 加载模型
+    model = joblib.load(_model_path)
+    # 创建 SHAP Explainer
+    explainer = shap.TreeExplainer(model)
+    return model, explainer
 
-# 函数定义结束后，在顶格调用
-model, explainer = load_model_and_explainer(model)
+# 2. 指定模型路径（根据实际情况修改）
+MODEL_PATH = Path(__file__).parent / "xgb_model.pkl"
+model, explainer = load_model_and_explainer(str(MODEL_PATH))
 
 # —— Streamlit 页面布局 —— #
-st.title("健康风险预测 (CHARLS) + SHAP 可解释性")
+st.title("CHARLS 健康风险预测 (预训练模型 + SHAP 可解释性)")
 
 st.sidebar.header("输入患者特征")
+# （以下保持和之前一致的输入控件）
 age        = st.sidebar.number_input("Age",                    min_value=18,   max_value=120,   value=60)
 gender     = st.sidebar.selectbox("Gender (0=F, 1=M)",        [0,1])
 familysize = st.sidebar.number_input("Family size",            min_value=1,    max_value=10,    value=3)
@@ -56,7 +38,7 @@ iadl       = st.sidebar.number_input("IADL score",             min_value=0.0,  m
 pain       = st.sidebar.selectbox("Pain (0=No, 1=Yes)",       [0,1])
 
 if st.sidebar.button("Predict"):
-    # 构造新样本并预测
+    # 构造 DataFrame 并预测
     X_new = pd.DataFrame([{
         "age": age, "gender": gender, "familysize": familysize,
         "exercise": exercise, "totmet": totmet, "srh": srh,
@@ -83,3 +65,4 @@ if st.sidebar.button("Predict"):
     plt.title("SHAP Force Plot for This Sample")
     plt.tight_layout()
     st.pyplot(fig)
+
