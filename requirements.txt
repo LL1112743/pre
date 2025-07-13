@@ -6,7 +6,5 @@ matplotlib==3.10.3
 xgboost==3.0.2
 scikit-learn==1.7.0
 shap==0.48.0
-<<<<<<< HEAD:requirement.txt
-=======
 xgboost
->>>>>>> 8902f00 (Rename to requirements.txt and add xgboost):requirements.txt
+
